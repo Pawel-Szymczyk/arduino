@@ -1,3 +1,5 @@
 # Don't track content of these folders
 DeskLamp/config.h
 Rollet/config.h
+RGB/config.h
+Temperature/config.h
