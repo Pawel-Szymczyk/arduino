@@ -58,41 +58,42 @@ void callback(char* topic, byte* payload, unsigned int length) {
   JsonObject& root = jsonBuffer.parseObject(jsonObject);
 
   //int numOfLeds = root["numOfLeds"].as<int>();
-  int red = root["red"].as<int>();
-  int green = root["green"].as<int>();
-  int blue = root["blue"].as<int>();
+  int hue = root["hue"].as<int>();
+  int saturation = root["saturation"].as<int>();
+  int value = root["value"].as<int>();
   int brightness = root["brightness"].as<int>();
-  //String state = root["state"].as<String>();
-  //String option = root["option"].as<String>();
+  String state = root["state"].as<String>();
+  String option = root["option"].as<String>();
   
-  Serial.println(red);
-  Serial.println(green);
-  Serial.println(blue);
-  //Serial.println(root["state"].as<String>());
+ 
+ 
+  if(root["state"].as<String>() == "off") {
+    Serial.println("Turn off");
+    LedOff(); 
+  }
+  if(root["state"].as<String>() == "on") {
+    Serial.println("Turn on");
+    if(LedOn()) {
 
-  // turn the led on if the payload is '1' and publish to the MQTT server a conf msg.
-  //if(root["state"].as<String>() == "off") {
-  //  LightOff(); 
-  //}
-  //if(root["state"].as<String>() == "on") {
-  //  LightOn(); 
-  //}
+      FastLED.setBrightness(brightness);
+      // ****************************************************
+      if(root["option"].as<String>() == "solid") {
+        // ConstPalleteColor(red, green, blue);
+        ConstPalleteColorHSV(hue, saturation, value);
+      }
 
-    Serial.println("Callback");
-  
-    // ****************************************************
-    FastLED.setBrightness(  brightness );
-    ConstPalleteColor(red, green, blue);
-    
-    static uint8_t startIndex = 0;
-    startIndex = startIndex + 1; /* motion speed */
-        
-    //FastLED.show();
-    //FastLED.delay(1000 / UPDATES_PER_SECOND);
-    // ****************************************************
+      else if(root["option"].as<String>() == "rainbow") {
+        rainbow_march(200, 10);
+        FastLED.show();
+      }
 
-
-
+      if(root["option"].as<String>() == "whiteAndBlack") {
+        SetupBlackAndWhiteStripedPalette();
+        FastLED.show();
+      }
+      // ****************************************************
+    }; 
+  }
   
   
   // Clear JSON object
@@ -102,8 +103,16 @@ void callback(char* topic, byte* payload, unsigned int length) {
 WiFiClient wifiClient;
 PubSubClient client(mqttServer, mqttPort, callback, wifiClient);
 
+// ====================================================
+// Power State
+bool LedOn() {
+  digitalWrite(2, HIGH);   // turn the Light on (HIGH is the voltage level);
+  return true;
+}
 
-
+void LedOff() {
+  digitalWrite(2, LOW);    // turn the Light off by making the voltage LOW
+}
 
 // ====================================================
 // Color Palettes
@@ -111,14 +120,68 @@ PubSubClient client(mqttServer, mqttPort, callback, wifiClient);
 void ConstPalleteColor(uint8_t R, uint8_t G, uint8_t B) {    
     for( int i = 0; i < NUM_LEDS; i++) {
         fill_solid( &(leds[i]), NUM_LEDS, CRGB( R, G, B) );
-        //fill_solid( &(leds[i]), NUM_LEDS /*number of leds*/, CHSV( R, G, B) );
-        //fill_rainbow( &(leds[i]), NUM_LEDS /*led count*/, R /*starting hue*/);
         FastLED.show();
     }
 }
 
+void ConstPalleteColorHSV(uint8_t H, uint8_t S, uint8_t V) {    
+    for( int i = 0; i < NUM_LEDS; i++) {
+        fill_solid( &(leds[i]), NUM_LEDS, CHSV( H, S, V) );
+        FastLED.show();
+    }
+}
 
+void SetupBlackAndWhiteStripedPalette()
+{
+    // 'black out' all 16 palette entries...
+    fill_solid( currentPalette, 16, CRGB::Black);
+    // and set every fourth one to white.
+    currentPalette[0] = CRGB::White;
+    currentPalette[4] = CRGB::White;
+    currentPalette[8] = CRGB::White;
+    currentPalette[12] = CRGB::White;
+}
+ 
+void rainbow_march(uint8_t thisdelay, uint8_t deltahue) {
 
+    uint8_t thishue = millis()*(255-thisdelay)/255;
+    fill_rainbow(leds, NUM_LEDS, thishue, deltahue); 
+}
+
+void SetupPurpleAndGreenPalette()
+{
+    CRGB purple = CHSV( HUE_PURPLE, 255, 255);
+    CRGB green  = CHSV( HUE_GREEN, 255, 255);
+    CRGB black  = CRGB::Black;
+    
+    currentPalette = CRGBPalette16(
+                                   green,  green,  black,  black,
+                                   purple, purple, black,  black,
+                                   green,  green,  black,  black,
+                                   purple, purple, black,  black );
+}
+
+const TProgmemPalette16 myRedWhiteBluePalette_p PROGMEM =
+{
+    CRGB::Red,
+    CRGB::Gray, // 'white' is too bright compared to red and blue
+    CRGB::Blue,
+    CRGB::Black,
+    
+    CRGB::Red,
+    CRGB::Gray,
+    CRGB::Blue,
+    CRGB::Black,
+    
+    CRGB::Red,
+    CRGB::Red,
+    CRGB::Gray,
+    CRGB::Gray,
+    CRGB::Blue,
+    CRGB::Blue,
+    CRGB::Black,
+    CRGB::Black
+};
 // ====================================================
 
 
@@ -137,20 +200,20 @@ void setup() {
   delay(500);
 
   // initialize digital pin LED_BUILTIN as an output.
-  //pinMode(LED_PIN, OUTPUT);
+  pinMode(2, OUTPUT);
 
   // connection to the broker...
   if(connect()) {
     subscribe();
   }
 
-    // Leds setup
-    delay( 3000 ); // power-up safety delay
-    FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
-    FastLED.setBrightness(  BRIGHTNESS );
-    
-    currentPalette = RainbowColors_p;
-    currentBlending = LINEARBLEND;
+  // Leds setup
+  delay( 3000 ); // power-up safety delay
+  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  FastLED.setBrightness(  BRIGHTNESS );
+  
+  currentPalette = RainbowColors_p;
+  currentBlending = LINEARBLEND;
 }
 
 void loop() {
@@ -216,7 +279,6 @@ bool connect() {
   }
   else {
     Serial.println(client.state());
-    Serial.println("Keeps disconnecting");
     connectionFlag = false;
     return false;
   }
